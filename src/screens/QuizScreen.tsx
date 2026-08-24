@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { getRandomQuestions } from '../data/questions';
-import { getDistrictById } from '../data/districts';
+import { getTarget } from '../data/targets';
 import { useGameStore } from '../store/gameStore';
 import { colors } from '../theme/colors';
 import { RootStackParamList } from '../navigation/types';
@@ -12,8 +12,8 @@ const QUESTION_COUNT = 20;
 type Props = NativeStackScreenProps<RootStackParamList, 'Quiz'>;
 
 export default function QuizScreen({ route, navigation }: Props) {
-  const { districtId } = route.params;
-  const district = getDistrictById(districtId);
+  const { targetId } = route.params;
+  const target = getTarget(targetId);
   const questions = useMemo(() => getRandomQuestions(QUESTION_COUNT), []);
   const submitConquestAttempt = useGameStore((s) => s.submitConquestAttempt);
   const getAllPlayers = useGameStore((s) => s.getAllPlayers);
@@ -34,12 +34,12 @@ export default function QuizScreen({ route, navigation }: Props) {
 
     setTimeout(() => {
       if (isLast) {
-        const result = submitConquestAttempt(districtId, nextScore);
+        const result = submitConquestAttempt(targetId, nextScore);
         const previousOwner = result.previousOwnerId
           ? getAllPlayers().find((p) => p.id === result.previousOwnerId) ?? null
           : null;
         navigation.replace('Result', {
-          districtId,
+          targetId,
           score: nextScore,
           total: questions.length,
           success: result.success,
@@ -53,13 +53,13 @@ export default function QuizScreen({ route, navigation }: Props) {
     }, 400);
   }
 
-  if (!current || !district) return null;
+  if (!current || !target) return null;
 
   return (
     <View style={styles.container}>
       <View style={styles.progressRow}>
         <Text style={styles.progressText}>
-          {district.name} · Soru {index + 1}/{questions.length}
+          {target.name} · Soru {index + 1}/{questions.length}
         </Text>
         <Text style={styles.scoreText}>Skor: {score}</Text>
       </View>

@@ -1,15 +1,21 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMusic } from '../audio/MusicProvider';
+import CountryCarousel from '../components/CountryCarousel';
 import GameModeCard from '../components/GameModeCard';
-import ProvinceCarousel from '../components/ProvinceCarousel';
 import SkyBackdrop from '../components/SkyBackdrop';
-import ZoomableTurkeyMap from '../components/ZoomableTurkeyMap';
-import { DISTRICTS } from '../data/districts';
-import { District } from '../types';
+import WorldGlobeView from '../components/WorldGlobeView';
+// Pasif kalan harita sürümleri — geri dönmek için ilgili import ve aşağıdaki
+// harita bloğunu tekrar açmak yeterli:
+// import WorldGlobe from '../components/WorldGlobe';           // SVG küre (yavaştı)
+// import ZoomableWorldMap from '../components/ZoomableWorldMap'; // düz dünya haritası
+// import ProvinceCarousel from '../components/ProvinceCarousel'; // Türkiye kurgusu
+// import ZoomableTurkeyMap from '../components/ZoomableTurkeyMap'; // Türkiye kurgusu
+import { WORLD_CITIES, WorldCity } from '../data/worldCities';
+import { getCountry } from '../data/worldCountryPaths';
 import { TabScreenProps } from '../navigation/types';
 import { useGameStore } from '../store/gameStore';
 import { colors } from '../theme/colors';
@@ -21,7 +27,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'>) {
   const insets = useSafeAreaInsets();
   const music = useMusic();
-  const [viewMode, setViewMode] = useState<ViewMode>('map');
+  // Açılış ülke kartlarıyla: harita ağır bir bileşen, ancak istenince kurulur.
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  // Küre bir kez kurulduktan sonra ekranda kalır (gizlenir), tekrar yüklenmez.
+  const [globeRequested, setGlobeRequested] = useState(false);
+  const [globeReady, setGlobeReady] = useState(false);
   const localPlayer = useGameStore((s) => s.localPlayer);
   const conquests = useGameStore((s) => s.conquests); // re-render tetikleyici
 
@@ -30,61 +40,65 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
     [conquests, localPlayer.id]
   );
 
-  function confirmAttack(target: District, message: string) {
-    Alert.alert(message, `${target.name} (${target.city}) bölgesine saldır?`, [
+  // Ülkeler, içlerinde şehri olan oyuncunun rengiyle boyanır.
+  const getCountryColors = useGameStore((s) => s.getCountryColors);
+  const ownerColors = useMemo(() => getCountryColors(), [conquests, localPlayer.color]);
+
+  function confirmAttack(target: WorldCity, message: string) {
+    const countryName = getCountry(target.country)?.name ?? '';
+    Alert.alert(message, `${target.name} (${countryName}) şehrine saldır?`, [
       { text: 'Vazgeç', style: 'cancel' },
       {
         text: 'Saldır',
         style: 'destructive',
-        onPress: () => navigation.navigate('Quiz', { districtId: target.id }),
+        onPress: () => navigation.navigate('Quiz', { targetId: target.id }),
       },
     ]);
   }
 
-  function pickRandom(pool: District[]) {
+  function pickRandom(pool: WorldCity[]) {
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   function handleQuickBattle() {
     const state = useGameStore.getState();
-    const attackable = DISTRICTS.filter(
-      (d) => state.getOwner(d.id)?.id !== state.localPlayer.id
+    const attackable = WORLD_CITIES.filter(
+      (city) => state.conquests[city.id]?.ownerId !== state.localPlayer.id
     );
-    const pool = attackable.length > 0 ? attackable : DISTRICTS;
+    const pool = attackable.length > 0 ? attackable : WORLD_CITIES;
     confirmAttack(pickRandom(pool), 'Hızlı Savaş');
   }
 
   function handleTargetedAttack() {
     Alert.alert(
       'Hedefli Saldırı',
-      'Yukarıdaki haritadan bir il seç, ardından listeden saldırmak istediğin ilçeye dokun.'
+      'Yukarıdaki dünya haritasından bir ülkeye dokun, açılan şehir kartlarından hedefini seç.'
     );
   }
 
-  // Komşu Fetih: şimdilik "komşuluk" = sahip olunan ilçenin ilindeki diğer ilçeler.
-  // Gerçek sınır komşuluğu backend'den gelince burası değişecek.
+  // Komşu Fetih: şimdilik "komşuluk" = bayrak diktiğin ülkedeki diğer şehirler.
+  // Gerçek sınır komşuluğu (ülkeler arası) backend'den gelince burası değişecek.
   function handleNeighborConquest() {
     const state = useGameStore.getState();
-    const ownedCities = new Set(
-      Object.entries(state.conquests)
-        .filter(([, c]) => c.ownerId === state.localPlayer.id)
-        .map(([id]) => DISTRICTS.find((d) => d.id === id)?.city)
-        .filter((city): city is string => !!city)
+    const ownedCountries = new Set(
+      WORLD_CITIES.filter(
+        (city) => state.conquests[city.id]?.ownerId === state.localPlayer.id
+      ).map((city) => city.country)
     );
 
-    if (ownedCities.size === 0) {
-      Alert.alert('Komşu Fetih', 'Önce Hızlı Savaş ile ilk bölgeni fethetmelisin.');
+    if (ownedCountries.size === 0) {
+      Alert.alert('Komşu Fetih', 'Önce Hızlı Savaş ile ilk şehrini fethetmelisin.');
       return;
     }
 
-    const pool = DISTRICTS.filter(
-      (d) =>
-        ownedCities.has(d.city) &&
-        state.conquests[d.id]?.ownerId !== state.localPlayer.id
+    const pool = WORLD_CITIES.filter(
+      (city) =>
+        ownedCountries.has(city.country) &&
+        state.conquests[city.id]?.ownerId !== state.localPlayer.id
     );
 
     if (pool.length === 0) {
-      Alert.alert('Komşu Fetih', 'Komşu bölgelerin tamamı zaten senin!');
+      Alert.alert('Komşu Fetih', 'Bayrak diktiğin ülkelerin tamamı zaten senin!');
       return;
     }
 
@@ -92,9 +106,9 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
   }
 
   function handleDailySiege() {
-    // Gün numarasına göre sabit hedef: aynı gün içinde herkese aynı ilçe düşer.
+    // Gün numarasına göre sabit hedef: aynı gün içinde herkese aynı şehir düşer.
     const dayIndex = Math.floor(Date.now() / DAY_MS);
-    confirmAttack(DISTRICTS[dayIndex % DISTRICTS.length], 'Günlük Kuşatma');
+    confirmAttack(WORLD_CITIES[dayIndex % WORLD_CITIES.length], 'Günlük Kuşatma');
   }
 
   return (
@@ -120,7 +134,7 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
         <View style={styles.headerRight}>
           <View style={styles.statChip}>
             <MaterialCommunityIcons name="flag-variant" size={13} color={colors.gold} />
-            <Text style={styles.statText}>{ownedCount} ilçe</Text>
+            <Text style={styles.statText}>{ownedCount} şehir</Text>
           </View>
           <Pressable
             style={styles.trophyButton}
@@ -131,8 +145,50 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
         </View>
       </View>
 
-      {/* Ekranın üst yarısı: harita */}
+      {/* Ekranın üst yarısı: ülke kartları ya da küre */}
       <View style={styles.mapArea}>
+        {viewMode === 'list' && (
+          <CountryCarousel
+            onSelectCountry={(countryCode) =>
+              navigation.navigate('CityList', { countryCode })
+            }
+          />
+        )}
+
+        {/* Küre bir kez istendikten sonra ağaçta kalır; kartlara dönünce
+            sadece gizlenir, böylece ikinci açılış anında gelir. */}
+        {globeRequested && (
+          <View
+            style={[StyleSheet.absoluteFill, viewMode !== 'map' && styles.hiddenLayer]}
+            pointerEvents={viewMode === 'map' ? 'auto' : 'none'}
+          >
+            <WorldGlobeView
+              ownerColors={ownerColors}
+              onReady={() => setGlobeReady(true)}
+              onSelectCountry={(countryCode) =>
+                navigation.navigate('CityList', { countryCode })
+              }
+            />
+          </View>
+        )}
+
+        {viewMode === 'map' && !globeReady && (
+          <View style={[StyleSheet.absoluteFill, styles.globeLoading]}>
+            <ActivityIndicator size="large" color={colors.textInverse} />
+            <Text style={styles.globeLoadingTitle}>Dünya hazırlanıyor…</Text>
+            <Text style={styles.globeLoadingHint}>
+              Bu yükleme sadece bir kez yapılır.
+            </Text>
+          </View>
+        )}
+
+        {/* Düz dünya haritası (pasif):
+        <ZoomableWorldMap
+          ownerColors={ownerColors}
+          onSelectCountry={(countryCode) => navigation.navigate('CityList', { countryCode })}
+        /> */}
+
+        {/* Türkiye kurgusu (pasif):
         {viewMode === 'map' ? (
           <ZoomableTurkeyMap
             onSelectProvince={(provinceName) =>
@@ -145,16 +201,19 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
               navigation.navigate('DistrictList', { provinceName })
             }
           />
-        )}
+        )} */}
 
         <View style={styles.viewModeToggle}>
           <Pressable
-            onPress={() => setViewMode('map')}
+            onPress={() => {
+              setGlobeRequested(true);
+              setViewMode('map');
+            }}
             style={[styles.viewModeButton, viewMode === 'map' && styles.viewModeButtonActive]}
           >
             <Ionicons
-              name="map"
-              size={16}
+              name="earth"
+              size={17}
               color={viewMode === 'map' ? colors.surfaceDark : colors.textInverse}
             />
           </Pressable>
@@ -162,9 +221,9 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
             onPress={() => setViewMode('list')}
             style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]}
           >
-            <Ionicons
-              name="list"
-              size={16}
+            <MaterialCommunityIcons
+              name="cards"
+              size={17}
               color={viewMode === 'list' ? colors.surfaceDark : colors.textInverse}
             />
           </Pressable>
@@ -176,7 +235,7 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
         <View style={styles.cardRow}>
           <GameModeCard
             title="Hızlı Savaş"
-            subtitle="Sistem rastgele bir ilçe seçer. Hemen fethet."
+            subtitle="Sistem dünyadan rastgele bir şehir seçer. Hemen fethet."
             tag="RASTGELE"
             icon="sword-cross"
             gradient={['#FF7E6B', '#E11D48']}
@@ -184,7 +243,7 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
           />
           <GameModeCard
             title="Hedefli Saldırı"
-            subtitle="Haritadan istediğin ilçeyi seç ve doğrudan saldır."
+            subtitle="Haritadan ülkeyi aç, istediğin şehre doğrudan saldır."
             tag="SEÇİMLİ"
             icon="target"
             gradient={['#5CC6FF', '#2563EB']}
@@ -195,7 +254,7 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
         <View style={styles.cardRow}>
           <GameModeCard
             title="Komşu Fetih"
-            subtitle="Sadece sahip olduğun bölgelere komşu ilçelere saldır."
+            subtitle="Bayrak diktiğin ülkelerin diğer şehirlerine saldır."
             tag="STRATEJİ"
             icon="fire"
             gradient={['#5FE0B0', '#0D9488']}
@@ -203,7 +262,7 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
           />
           <GameModeCard
             title="Günlük Kuşatma"
-            subtitle="Her gün özel bir ilçe. Fethedene ekstra altın."
+            subtitle="Her gün özel bir şehir. Fethedene ekstra altın."
             tag="ÖDÜLLÜ"
             icon="trophy-variant"
             gradient={['#FFD35C', '#E08A00']}
@@ -290,6 +349,28 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     marginHorizontal: 10,
+  },
+  hiddenLayer: {
+    display: 'none',
+  },
+  globeLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(43,29,74,0.25)',
+  },
+  globeLoadingTitle: {
+    color: colors.textInverse,
+    fontSize: 15,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  globeLoadingHint: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    fontWeight: '600',
   },
   viewModeToggle: {
     position: 'absolute',

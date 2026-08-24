@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { StyleSheet, Text, View } from 'react-native';
 import Button3D from '../components/Button3D';
-import { getDistrictById } from '../data/districts';
+import { getTarget } from '../data/targets';
 import { colors } from '../theme/colors';
 import { raisedCardLight } from '../theme/shadows';
 import { RootStackParamList } from '../navigation/types';
@@ -9,14 +9,17 @@ import { RootStackParamList } from '../navigation/types';
 type Props = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
 export default function ResultScreen({ route, navigation }: Props) {
-  const { districtId, score, total, success, previousOwnerName, previousScore } = route.params;
-  const district = getDistrictById(districtId);
+  const { targetId, score, total, success, previousOwnerName, previousScore } = route.params;
+  const target = getTarget(targetId);
 
   return (
     <View style={styles.container}>
       <Text style={styles.emoji}>{success ? '🏰' : '⚔️'}</Text>
       <Text style={styles.result}>{success ? 'Fetih Başarılı!' : 'Fetih Başarısız'}</Text>
-      <Text style={styles.districtName}>{district?.name}</Text>
+      <Text style={styles.districtName}>
+        {target?.name}
+        {target?.parentName ? ` · ${target.parentName}` : ''}
+      </Text>
 
       <View style={[styles.scoreCard, raisedCardLight]}>
         <Text style={styles.scoreLabel}>Senin skorun</Text>
@@ -45,7 +48,7 @@ export default function ResultScreen({ route, navigation }: Props) {
         </Button3D>
         <Button3D
           color={colors.surface}
-          onPress={() => navigation.replace('Quiz', { districtId })}
+          onPress={() => navigation.replace('Quiz', { targetId })}
         >
           <Text style={styles.secondaryButtonText}>Tekrar Dene</Text>
         </Button3D>

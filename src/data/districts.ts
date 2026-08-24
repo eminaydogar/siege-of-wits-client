@@ -1,7 +1,10 @@
 import { District } from '../types';
 
+// PASİF: Kurgu dünya haritasına geçtiği için fetih hedefleri artık dünya
+// şehirleri (bkz. data/worldCities.ts + data/targets.ts). Türkiye kurgusuna
+// dönülürse bu veri ve DistrictList/DistrictDetail ekranları tekrar bağlanacak.
+//
 // İlk sürüm için sınırlı sayıda gerçek ilçe verisi.
-// Gerçek harita entegrasyonunda (SVG/coğrafi veri) tüm Türkiye ilçeleri eklenecek.
 export const DISTRICTS: District[] = [
   { id: 'ist-kadikoy', name: 'Kadıköy', city: 'İstanbul' },
   { id: 'ist-besiktas', name: 'Beşiktaş', city: 'İstanbul' },

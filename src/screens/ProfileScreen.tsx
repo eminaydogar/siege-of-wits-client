@@ -39,8 +39,8 @@ export default function ProfileScreen({ navigation }: TabScreenProps<'Profil'>) 
       </View>
 
       <View style={styles.statsRow}>
-        <StatCard label="İlçe" value={stats.districtCount} />
-        <StatCard label="İl" value={stats.provinceCount} />
+        <StatCard label="Şehir" value={stats.cityCount} />
+        <StatCard label="Ülke" value={stats.countryCount} />
         <StatCard label="Skor" value={stats.totalScore} />
       </View>
 

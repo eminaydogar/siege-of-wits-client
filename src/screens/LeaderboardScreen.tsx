@@ -21,7 +21,7 @@ export default function LeaderboardScreen() {
             <View style={styles.info}>
               <Text style={styles.name}>{item.player.name}</Text>
               <Text style={styles.detail}>
-                {item.districtCount} ilçe · {item.totalScore} toplam skor
+                {item.cityCount} şehir · {item.totalScore} toplam skor
               </Text>
             </View>
           </View>

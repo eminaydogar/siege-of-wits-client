@@ -11,11 +11,16 @@ export type TabParamList = {
 
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<TabParamList>;
+  /** Dünya haritasında bir ülkeye dokununca açılan şehir kartları. */
+  CityList: { countryCode: string };
+  // Türkiye kurgusundan kalan ekranlar: şu an navigator'a kayıtlı değil,
+  // haritayı Türkiye'ye geri çevirmek isteyince tekrar açılacak.
   DistrictList: { provinceName: string };
   DistrictDetail: { districtId: string };
-  Quiz: { districtId: string };
+  /** targetId = fethedilecek birim (şu an dünya şehri, bkz. data/targets.ts). */
+  Quiz: { targetId: string };
   Result: {
-    districtId: string;
+    targetId: string;
     score: number;
     total: number;
     success: boolean;

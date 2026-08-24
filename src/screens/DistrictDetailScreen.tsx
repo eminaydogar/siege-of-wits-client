@@ -46,7 +46,10 @@ export default function DistrictDetailScreen({ route, navigation }: Props) {
           Bu bölge zaten senin. Rakipler daha yüksek skor yaparsa savunman gerekecek.
         </Text>
       ) : (
-        <Button3D color={colors.primary} onPress={() => navigation.navigate('Quiz', { districtId })}>
+        <Button3D
+          color={colors.primary}
+          onPress={() => navigation.navigate('Quiz', { targetId: districtId })}
+        >
           <Text style={styles.actionButtonText}>
             {isUnconquered ? 'Fethet' : `Saldır (Geçilecek skor: ${owner.score})`}
           </Text>
