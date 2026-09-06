@@ -18,7 +18,15 @@ export type RootStackParamList = {
   DistrictList: { provinceName: string };
   DistrictDetail: { districtId: string };
   /** targetId = fethedilecek birim (şu an dünya şehri, bkz. data/targets.ts). */
-  Quiz: { targetId: string };
+  Quiz: {
+    targetId: string;
+    /**
+     * Sınava anasayfadaki savaş modu kartından girildiyse o kartın gradienti.
+     * Sınav ekranı zeminini buna göre boyar; başka bir yerden (şehir listesi,
+     * bölge detayı) girildiğinde boş kalır ve ekran beyaz temaya düşer.
+     */
+    battleColors?: readonly [string, string];
+  };
   Result: {
     targetId: string;
     score: number;

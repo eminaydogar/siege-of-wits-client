@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import {
   FlatList,
   LayoutChangeEvent,
@@ -32,7 +32,7 @@ interface Props {
   onSelectCountry: (code: string) => void;
 }
 
-export default function CountryCarousel({ onSelectCountry }: Props) {
+function CountryCarousel({ onSelectCountry }: Props) {
   const [container, setContainer] = useState({ width: 0, height: 0 });
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -45,6 +45,19 @@ export default function CountryCarousel({ onSelectCountry }: Props) {
   const cardHeight = Math.max(0, container.height - FOOTER_HEIGHT - TOP_INSET);
   const sidePadding = Math.max(0, (container.width - cardWidth) / 2);
   const interval = cardWidth + CARD_GAP;
+
+  const renderItem = useCallback(
+    ({ item }: { item: CountryPath }) => (
+      <CountryCard
+        country={item}
+        width={cardWidth}
+        height={cardHeight}
+        cityCount={getCityCount(item.code)}
+        onSelect={onSelectCountry}
+      />
+    ),
+    [cardWidth, cardHeight, onSelectCountry]
+  );
 
   function handleScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
     if (interval <= 0) return;
@@ -73,15 +86,7 @@ export default function CountryCarousel({ onSelectCountry }: Props) {
             offset: interval * index,
             index,
           })}
-          renderItem={({ item }) => (
-            <CountryCard
-              country={item}
-              width={cardWidth}
-              height={cardHeight}
-              cityCount={getCityCount(item.code)}
-              onPress={() => onSelectCountry(item.code)}
-            />
-          )}
+          renderItem={renderItem}
         />
       )}
 
@@ -94,18 +99,24 @@ export default function CountryCarousel({ onSelectCountry }: Props) {
   );
 }
 
-function CountryCard({
+/**
+ * Kart, ülkenin sınır SVG'sini çiziyor — react-native-svg her render'da tüm
+ * vektör ağacını yeniden rasterleştirdiği için bu iş pahalı. Bu yüzden hem
+ * kart hem de karüselin kendisi memo'lu: ana ekrandaki alakasız bir state
+ * değişimi (ör. savaş modalının açılması) buraya kadar inmesin.
+ */
+const CountryCard = memo(function CountryCard({
   country,
   width,
   height,
   cityCount,
-  onPress,
+  onSelect,
 }: {
   country: CountryPath;
   width: number;
   height: number;
   cityCount: number;
-  onPress: () => void;
+  onSelect: (code: string) => void;
 }) {
   const continent = getContinent(country.continent);
   const { bounds } = country;
@@ -132,7 +143,10 @@ function CountryCard({
   ];
 
   return (
-    <Pressable onPress={onPress} style={{ width, height, marginRight: CARD_GAP }}>
+    <Pressable
+      onPress={() => onSelect(country.code)}
+      style={{ width, height, marginRight: CARD_GAP }}
+    >
       <LinearGradient
         colors={gradientColors}
         start={{ x: 0, y: 0 }}
@@ -144,7 +158,7 @@ function CountryCard({
             width={width}
             height={height}
             viewBox={`0 0 ${width} ${height}`}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           >
             <G transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               <Path d={country.path} fill="rgba(255,255,255,0.22)" fillRule="evenodd" />
@@ -168,7 +182,9 @@ function CountryCard({
       </LinearGradient>
     </Pressable>
   );
-}
+});
+
+export default memo(CountryCarousel);
 
 const styles = StyleSheet.create({
   wrapper: {

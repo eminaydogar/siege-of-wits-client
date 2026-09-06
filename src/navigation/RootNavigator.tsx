@@ -1,7 +1,7 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getCountry } from '../data/worldCountryPaths';
-import { colors } from '../theme/colors';
+import { colors, skyBackground } from '../theme/colors';
 import { RootStackParamList } from './types';
 import MainTabs from './MainTabs';
 import CityListScreen from '../screens/CityListScreen';
@@ -15,11 +15,26 @@ import LeaderboardScreen from '../screens/LeaderboardScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+/**
+ * Ekranların altında kalan zemin.
+ *
+ * Varsayılan tema burayı rgb(242,242,242) yapıyor; yeni ekran sağdan kayarken
+ * kendi zeminini boyayana kadar bir kare boyunca o açık renk görünüyordu —
+ * ekranın sağ üst köşesinde beliren beyaz dilim buydu. Uygulamanın gökyüzü
+ * zemininin tepe rengine çekilince geçiş dikişsiz oluyor.
+ */
+const navigationTheme = {
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: skyBackground[0] },
+};
+
 export default function RootNavigator() {
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator
         screenOptions={{
+          // Geçiş sırasında ekranın arkasında kalan yüzey.
+          contentStyle: { backgroundColor: skyBackground[0] },
           headerStyle: { backgroundColor: colors.surface },
           headerTintColor: colors.text,
           headerTitleStyle: { fontWeight: '700' },
@@ -30,9 +45,8 @@ export default function RootNavigator() {
         <Stack.Screen
           name="CityList"
           component={CityListScreen}
-          options={({ route }) => ({
-            title: getCountry(route.params.countryCode)?.name ?? 'Ülke',
-          })}
+          // Ekran kendi üst çubuğunu çiziyor (Geri Dön düğmesi orada).
+          options={{ headerShown: false }}
         />
         {/* Türkiye kurgusu (pasif):
         <Stack.Screen
@@ -48,7 +62,8 @@ export default function RootNavigator() {
         <Stack.Screen
           name="Quiz"
           component={QuizScreen}
-          options={{ title: 'Fetih Sınavı', headerBackVisible: false, gestureEnabled: false }}
+          // Sınav ekranı kendi koyu üst çubuğunu çiziyor (Savaştan Ayrıl düğmesi orada).
+          options={{ headerShown: false, gestureEnabled: false }}
         />
         <Stack.Screen
           name="Result"

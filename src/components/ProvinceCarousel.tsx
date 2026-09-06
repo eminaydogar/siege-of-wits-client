@@ -150,7 +150,7 @@ function ProvinceCard({
             width={width}
             height={height}
             viewBox={`0 0 ${width} ${height}`}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           >
             <G transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               <Path d={path} fill="rgba(255,255,255,0.2)" />

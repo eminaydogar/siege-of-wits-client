@@ -30,7 +30,6 @@ interface GlobePayload {
     labelSpan: number;
   }[];
   initial: { lon: number; lat: number };
-  sky: [string, string];
 }
 
 function buildPayload(): GlobePayload {
@@ -49,7 +48,6 @@ function buildPayload(): GlobePayload {
     }),
     // Açılışta Türkiye ortada.
     initial: { lon: 35, lat: 39 },
-    sky: [colors.skyTop, colors.sky],
   };
 }
 
@@ -74,7 +72,7 @@ const GLOBE_SCRIPT = String.raw`
   var NEAR_MISS_DEGREES = 2.2;
 
   var canvas = document.getElementById('globe');
-  var ctx = canvas.getContext('2d', { alpha: false });
+  var ctx = canvas.getContext('2d');
 
   var W = 0, H = 0;
   var lambda = D.initial.lon * DEG;
@@ -197,15 +195,12 @@ const GLOBE_SCRIPT = String.raw`
   function draw() {
     var R = radius(), cx = W / 2, cy = H / 2;
 
-    var sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, D.sky[0]);
-    sky.addColorStop(1, D.sky[1]);
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H);
+    // Zemin saydam: kürenin arkasında ekranın kendi arka planı kalır.
+    ctx.clearRect(0, 0, W, H);
 
     // Atmosfer halesi.
     var halo = ctx.createRadialGradient(cx, cy, R * 0.98, cx, cy, R * 1.14);
-    halo.addColorStop(0, 'rgba(191,233,255,0.45)');
+    halo.addColorStop(0, 'rgba(191,233,255,0.28)');
     halo.addColorStop(1, 'rgba(191,233,255,0)');
     ctx.fillStyle = halo;
     ctx.beginPath();
@@ -214,9 +209,9 @@ const GLOBE_SCRIPT = String.raw`
 
     // Okyanus.
     var ocean = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.44, R * 0.1, cx, cy, R);
-    ocean.addColorStop(0, '#63C7EC');
-    ocean.addColorStop(0.65, '#2E86B8');
-    ocean.addColorStop(1, '#14456B');
+    ocean.addColorStop(0, '#57AFD0');
+    ocean.addColorStop(0.65, '#2979A6');
+    ocean.addColorStop(1, '#123F62');
     ctx.fillStyle = ocean;
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
@@ -535,7 +530,7 @@ export function buildGlobeHtml(): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: ${colors.sky}; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: transparent; }
   canvas { display: block; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 </style>
 </head>

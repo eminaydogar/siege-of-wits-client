@@ -1,5 +1,6 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -7,10 +8,12 @@ import {
   LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, G, Path } from 'react-native-svg';
 import Button3D from '../components/Button3D';
 import { getContinent } from '../data/continents';
@@ -18,7 +21,7 @@ import { getCitiesOfCountry, WorldCity } from '../data/worldCities';
 import { COUNTRY_PATHS, getCountry } from '../data/worldCountryPaths';
 import { RootStackScreenProps } from '../navigation/types';
 import { useGameStore } from '../store/gameStore';
-import { colors } from '../theme/colors';
+import { colors, skyBackground, skyBackgroundLocations } from '../theme/colors';
 import { shadeColor } from '../utils/color';
 
 const CARD_GAP = 14;
@@ -34,6 +37,15 @@ const MIN_LAND_SPAN = 26;
 const MAX_LAND_SPAN = 130;
 const LAND_SPAN_RATIO = 0.75;
 
+// Panel ve çiplerin ortak koyu perdesi: gökyüzü zemininin her yüksekliğinde
+// beyaz yazıyı okunur tutar.
+const SCRIM = 'rgba(8,12,32,0.5)';
+
+// Fetih flamasının sabit kırmızısı — sahibine göre değişmez, fetih hep aynı
+// renkle okunur. Alttaki koyu ton banda kalınlık (3B) hissi verir.
+const RIBBON_FACE = colors.danger;
+const RIBBON_BASE = shadeColor(colors.danger, -28);
+
 function formatPopulation(population: number): string {
   if (population >= 1_000_000) {
     return `${(population / 1_000_000).toFixed(1).replace('.', ',')} milyon nüfus`;
@@ -45,6 +57,7 @@ function formatPopulation(population: number): string {
 }
 
 export default function CityListScreen({ route, navigation }: RootStackScreenProps<'CityList'>) {
+  const insets = useSafeAreaInsets();
   const { countryCode } = route.params;
   const country = getCountry(countryCode);
   const cities = useMemo(() => getCitiesOfCountry(countryCode), [countryCode]);
@@ -75,8 +88,9 @@ export default function CityListScreen({ route, navigation }: RootStackScreenPro
   }
 
   const cardWidth = Math.round(container.width * CARD_WIDTH_RATIO);
+  // Sayaç artık karüselin dışında; kartlar bu alanın tam ortasına oturur.
   const cardHeight = Math.min(
-    Math.max(0, container.height - FOOTER_HEIGHT),
+    Math.max(0, container.height),
     Math.round(cardWidth * CARD_ASPECT)
   );
   const sidePadding = Math.max(0, (container.width - cardWidth) / 2);
@@ -108,30 +122,62 @@ export default function CityListScreen({ route, navigation }: RootStackScreenPro
 
   if (!country) return null;
 
-  if (cities.length === 0) {
-    return (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyTitle}>{country.name}</Text>
-        <Text style={styles.emptyText}>
-          Bu ülke için henüz şehir verisi yok. Yakında daha fazla ülke savaş alanına
-          açılacak.
+  /** Üst çubuk: geri dönüş, ülke adı ve fetih sayacı. */
+  const header = (
+    <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+      <Pressable onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={8}>
+        <Ionicons name="chevron-back" size={16} color={colors.textInverse} />
+        <Text style={styles.backText}>Geri Dön</Text>
+      </Pressable>
+
+      <View style={styles.titleBlock}>
+        <Text style={styles.title} numberOfLines={1}>
+          {country.name}
+        </Text>
+        <Text style={styles.subtitle} numberOfLines={1}>
+          {continent ? `${continent.name} · ` : ''}
+          {cities.length} şehir
         </Text>
       </View>
+
+      <View style={styles.ownedChip}>
+        <Ionicons name="flag" size={12} color={colors.gold} />
+        <Text style={styles.ownedChipText}>{ownedCount}</Text>
+      </View>
+    </View>
+  );
+
+  if (cities.length === 0) {
+    return (
+      <LinearGradient
+        colors={skyBackground}
+        locations={skyBackgroundLocations}
+        style={styles.container}
+      >
+        <StatusBar style="light" />
+        {header}
+        <View style={styles.emptyState}>
+          <View style={styles.emptyCard}>
+            <Ionicons name="map-outline" size={30} color={colors.gold} />
+            <Text style={styles.emptyTitle}>{country.name}</Text>
+            <Text style={styles.emptyText}>
+              Bu ülke için henüz şehir verisi yok. Yakında daha fazla ülke savaş alanına
+              açılacak.
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.summary}>
-        <Text style={styles.summaryText}>
-          {continent ? `${continent.name} · ` : ''}
-          {cities.length} şehir
-        </Text>
-        <View style={styles.summaryChip}>
-          <Ionicons name="flag" size={12} color={colors.gold} />
-          <Text style={styles.summaryChipText}>{ownedCount} fethedildi</Text>
-        </View>
-      </View>
+    <LinearGradient
+      colors={skyBackground}
+      locations={skyBackgroundLocations}
+      style={styles.container}
+    >
+      <StatusBar style="light" />
+      {header}
 
       <View style={styles.carousel} onLayout={onLayout}>
         {container.width > 0 && (
@@ -144,7 +190,7 @@ export default function CityListScreen({ route, navigation }: RootStackScreenPro
             decelerationRate="fast"
             contentContainerStyle={{ paddingHorizontal: sidePadding }}
             onMomentumScrollEnd={handleScrollEnd}
-            style={{ height: cardHeight }}
+            style={{ height: cardHeight, flexGrow: 0 }}
             getItemLayout={(_, index) => ({
               length: interval,
               offset: interval * index,
@@ -163,14 +209,16 @@ export default function CityListScreen({ route, navigation }: RootStackScreenPro
             )}
           />
         )}
+      </View>
 
-        <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 10 }]}>
+        <View style={styles.counterPill}>
           <Text style={styles.counter}>
             {activeIndex + 1} / {cities.length}
           </Text>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -230,11 +278,7 @@ function CityCard({
     shadeColor(baseColor, -32),
   ];
 
-  const statusText = isLocalOwner
-    ? 'Senin toprağın'
-    : owner
-      ? `${owner.name} · Skor ${owner.score}`
-      : 'Fethedilmemiş';
+  const statusText = owner ? 'Fethedildi' : 'Fethedilmemiş';
 
   return (
     <View style={{ width, height, marginRight: CARD_GAP }}>
@@ -249,7 +293,7 @@ function CityCard({
             width={width}
             height={height}
             viewBox={`0 0 ${width} ${height}`}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           >
             <G transform={`translate(${translateX}, ${translateY}) scale(${scale})`}>
               {visibleLands.map((land) => (
@@ -290,9 +334,19 @@ function CityCard({
         {/* Metnin altındaki karartma: harita ne kadar açık olursa olsun yazı okunur. */}
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.55)']}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
+
+        {/* Fetih flaması: kartın sol üst köşesini çapraz saran bant. */}
+        {owner && (
+          <View style={styles.ribbon} pointerEvents="none">
+            <MaterialCommunityIcons name="sword-cross" size={12} color="#FFFFFF" />
+            <Text style={styles.ribbonText} numberOfLines={1}>
+              {owner.name}
+            </Text>
+          </View>
+        )}
 
         {city.isCapital && (
           <View style={styles.capitalBadge}>
@@ -318,12 +372,17 @@ function CityCard({
           </View>
 
           <Button3D
-            color={isLocalOwner ? colors.surface : colors.primary}
+            color={isLocalOwner ? colors.surface : colors.navy}
             disabled={isLocalOwner}
             onPress={onAttack}
             style={styles.attackButton}
           >
-            <Text style={styles.attackButtonText}>
+            <Text
+              style={[
+                styles.attackButtonText,
+                { color: isLocalOwner ? colors.text : '#FFFFFF' },
+              ]}
+            >
               {isLocalOwner
                 ? 'Fethedildi'
                 : owner
@@ -340,42 +399,66 @@ function CityCard({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundLight,
   },
-  summary: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 10,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
-  summaryText: {
-    fontSize: 13,
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingLeft: 8,
+    paddingRight: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+  },
+  backText: {
+    color: colors.textInverse,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  titleBlock: {
+    flex: 1,
+    gap: 1,
+  },
+  title: {
+    color: colors.textInverse,
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  subtitle: {
+    color: 'rgba(248,250,252,0.66)',
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.textMuted,
   },
-  summaryChip: {
+  ownedChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: colors.surface,
     paddingHorizontal: 11,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 999,
+    backgroundColor: 'rgba(212,175,55,0.14)',
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.35)',
+    borderColor: 'rgba(212,175,55,0.42)',
   },
-  summaryChipText: {
+  ownedChipText: {
+    color: colors.gold,
     fontSize: 12,
-    fontWeight: '800',
-    color: colors.text,
+    fontWeight: '900',
   },
   carousel: {
     flex: 1,
-    // Kartlar ekran boyunu kaplamadığı için dikeyde ortalanır.
+    // Kartlar ekran boyunu kaplamadığı için kalan alanın tam ortasına oturur.
     justifyContent: 'center',
-    paddingBottom: 12,
   },
   card: {
     flex: 1,
@@ -389,6 +472,36 @@ const styles = StyleSheet.create({
   cardOwned: {
     borderWidth: 2,
     borderColor: colors.gold,
+  },
+  /**
+   * Yatay bir bant -45° döndürülüp köşeye taşırılıyor; kartın overflow:hidden'ı
+   * taşan iki ucu kesince bant köşeyi saran bir flamaya dönüşüyor. Kalınlık
+   * hissi alt kenardaki kalın çizgiden geliyor (Android'de elevation kullanmadım:
+   * döndürülmüş çocuk, üst kartın yuvarlak köşe kırpmasından taşabiliyor).
+   */
+  ribbon: {
+    position: 'absolute',
+    top: 30,
+    left: -52,
+    width: 190,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 5,
+    backgroundColor: RIBBON_FACE,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.45)',
+    borderBottomWidth: 4,
+    borderBottomColor: RIBBON_BASE,
+    transform: [{ rotate: '-45deg' }],
+  },
+  ribbonText: {
+    flexShrink: 1,
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
   capitalBadge: {
     position: 'absolute',
@@ -444,36 +557,53 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   attackButtonText: {
-    color: colors.text,
     fontSize: 15,
     fontWeight: '800',
   },
   footer: {
-    height: FOOTER_HEIGHT,
+    minHeight: FOOTER_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Sayaç zeminin açıldığı yerde duruyor; kendi koyu perdesiyle okunur kalıyor.
+  counterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: SCRIM,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
   counter: {
-    color: colors.textMuted,
+    color: colors.textInverse,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    backgroundColor: colors.backgroundLight,
+    padding: 24,
+  },
+  emptyCard: {
+    alignItems: 'center',
+    gap: 10,
+    padding: 24,
+    borderRadius: 20,
+    backgroundColor: SCRIM,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: colors.text,
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '900',
+    color: colors.textInverse,
   },
   emptyText: {
-    fontSize: 14,
-    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+    color: 'rgba(248,250,252,0.7)',
     textAlign: 'center',
   },
 });

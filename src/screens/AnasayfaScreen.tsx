@@ -1,15 +1,17 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMusic } from '../audio/MusicProvider';
+import BattleModal, { BattleBriefing } from '../components/BattleModal';
 import CountryCarousel from '../components/CountryCarousel';
 import GameModeCard from '../components/GameModeCard';
-import SkyBackdrop from '../components/SkyBackdrop';
+import { useFocusedStatusBar } from '../hooks/useFocusedStatusBar';
 import WorldGlobeView from '../components/WorldGlobeView';
 // Pasif kalan harita sürümleri — geri dönmek için ilgili import ve aşağıdaki
 // harita bloğunu tekrar açmak yeterli:
+// import SkyBackdrop from '../components/SkyBackdrop';       // SVG gökyüzü + bulutlar
 // import WorldGlobe from '../components/WorldGlobe';           // SVG küre (yavaştı)
 // import ZoomableWorldMap from '../components/ZoomableWorldMap'; // düz dünya haritası
 // import ProvinceCarousel from '../components/ProvinceCarousel'; // Türkiye kurgusu
@@ -18,20 +20,103 @@ import { WORLD_CITIES, WorldCity } from '../data/worldCities';
 import { getCountry } from '../data/worldCountryPaths';
 import { TabScreenProps } from '../navigation/types';
 import { useGameStore } from '../store/gameStore';
-import { colors } from '../theme/colors';
+import { colors, skyBackground, skyBackgroundLocations } from '../theme/colors';
 
 type ViewMode = 'map' | 'list';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Savaş modları. Hem alttaki 2x2 kartların yüzü hem de dokununca açılan
+ * brifing modalı bu tek tablodan besleniyor.
+ *
+ * `description` ve `stats` şu an tasarım için sabit — backend bağlanınca bu
+ * alanlar API yanıtından gelecek, kartların ve modalın kodu değişmeyecek.
+ */
+const BATTLE_MODES = [
+  {
+    key: 'quick',
+    title: 'Hızlı Savaş',
+    subtitle: 'Sistem dünyadan rastgele bir şehir seçer. Hemen fethet.',
+    tag: 'RASTGELE',
+    icon: 'sword-cross',
+    gradient: ['#FF7E6B', '#E11D48'],
+    description:
+      'Dünyanın dört bir yanından rastgele bir şehir karşına çıkar. Hazırlık yok, doğrudan kuşatma: sınavı geçersen bayrağın surlara dikilir.',
+    actionLabel: 'Savaşa Katıl',
+    stats: [
+      { icon: 'help-circle-outline', label: 'Sınav', value: '20 soru' },
+      { icon: 'treasure-chest', label: 'Ödül', value: '120 altın' },
+      { icon: 'shield-sword', label: 'Zorluk', value: 'Orta' },
+    ],
+  },
+  {
+    key: 'targeted',
+    title: 'Hedefli Saldırı',
+    subtitle: 'Haritadan ülkeyi aç, istediğin şehre doğrudan saldır.',
+    tag: 'SEÇİMLİ',
+    icon: 'target',
+    gradient: ['#5CC6FF', '#2563EB'],
+    description:
+      'Hedefi sen belirlersin. Küreyi döndür, gözüne kestirdiğin ülkeye dokun ve açılan şehir kartlarından saldıracağın yeri seç.',
+    actionLabel: 'Haritayı Aç',
+    stats: [
+      { icon: 'help-circle-outline', label: 'Sınav', value: '20 soru' },
+      { icon: 'treasure-chest', label: 'Ödül', value: '150 altın' },
+      { icon: 'shield-sword', label: 'Zorluk', value: 'Hedefe göre' },
+    ],
+  },
+  {
+    key: 'neighbor',
+    title: 'Komşu Fetih',
+    subtitle: 'Bayrak diktiğin ülkelerin diğer şehirlerine saldır.',
+    tag: 'STRATEJİ',
+    icon: 'fire',
+    gradient: ['#5FE0B0', '#0D9488'],
+    description:
+      'Bayrağının dalgalandığı ülkelerdeki diğer şehirlere yürü. Sınırlarını genişlettikçe önüne yeni komşu hedefler açılır.',
+    actionLabel: 'Savaşa Katıl',
+    stats: [
+      { icon: 'help-circle-outline', label: 'Sınav', value: '20 soru' },
+      { icon: 'treasure-chest', label: 'Ödül', value: '180 altın' },
+      { icon: 'shield-sword', label: 'Zorluk', value: 'Zor' },
+    ],
+  },
+  {
+    key: 'daily',
+    title: 'Günlük Kuşatma',
+    subtitle: 'Her gün özel bir şehir. Fethedene ekstra altın.',
+    tag: 'ÖDÜLLÜ',
+    icon: 'trophy-variant',
+    gradient: ['#FFD35C', '#E08A00'],
+    description:
+      'Bugün tüm komutanların karşısına aynı şehir çıkıyor. Kuşatmayı kıranlar ekstra altın ve sıralama puanı kazanır — hak her gün yenilenir.',
+    actionLabel: 'Kuşatmaya Katıl',
+    stats: [
+      { icon: 'help-circle-outline', label: 'Sınav', value: '20 soru' },
+      { icon: 'treasure-chest', label: 'Ödül', value: '300 altın' },
+      { icon: 'timer-outline', label: 'Süre', value: 'Bugün' },
+    ],
+  },
+] as const;
+
+type BattleMode = (typeof BATTLE_MODES)[number];
+
 export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'>) {
   const insets = useSafeAreaInsets();
+  // Arka plan görselinin tepesi gece mavisi: ikonlar açık kalmalı.
+  useFocusedStatusBar('light');
   const music = useMusic();
   // Açılış ülke kartlarıyla: harita ağır bir bileşen, ancak istenince kurulur.
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   // Küre bir kez kurulduktan sonra ekranda kalır (gizlenir), tekrar yüklenmez.
   const [globeRequested, setGlobeRequested] = useState(false);
   const [globeReady, setGlobeReady] = useState(false);
+  // Açık brifing modalı: gösterilecek içerik + onaylanınca çalışacak eylem.
+  const [pending, setPending] = useState<{
+    briefing: BattleBriefing;
+    confirm: () => void;
+  } | null>(null);
   const localPlayer = useGameStore((s) => s.localPlayer);
   const conquests = useGameStore((s) => s.conquests); // re-render tetikleyici
 
@@ -40,85 +125,139 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
     [conquests, localPlayer.id]
   );
 
+  // Karüsel ve küre memo'lu: bu iki geri çağrı her render'da yeniden
+  // üretilirse memo delinir ve ülke SVG'leri boşuna yeniden çizilir.
+  const handleSelectCountry = useCallback(
+    (countryCode: string) => navigation.navigate('CityList', { countryCode }),
+    [navigation]
+  );
+  const handleGlobeReady = useCallback(() => setGlobeReady(true), []);
+
   // Ülkeler, içlerinde şehri olan oyuncunun rengiyle boyanır.
   const getCountryColors = useGameStore((s) => s.getCountryColors);
   const ownerColors = useMemo(() => getCountryColors(), [conquests, localPlayer.color]);
-
-  function confirmAttack(target: WorldCity, message: string) {
-    const countryName = getCountry(target.country)?.name ?? '';
-    Alert.alert(message, `${target.name} (${countryName}) şehrine saldır?`, [
-      { text: 'Vazgeç', style: 'cancel' },
-      {
-        text: 'Saldır',
-        style: 'destructive',
-        onPress: () => navigation.navigate('Quiz', { targetId: target.id }),
-      },
-    ]);
-  }
 
   function pickRandom(pool: WorldCity[]) {
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  function handleQuickBattle() {
+  /** Modun sabit bilgilerini alır, duruma özel alanları üstüne yazar. */
+  function openBriefing(
+    mode: BattleMode,
+    extra: Partial<BattleBriefing>,
+    confirm: () => void
+  ) {
+    setPending({
+      briefing: {
+        mode: mode.title,
+        tag: mode.tag,
+        icon: mode.icon,
+        gradient: mode.gradient,
+        description: mode.description,
+        stats: mode.stats,
+        actionLabel: mode.actionLabel,
+        ...extra,
+      },
+      confirm,
+    });
+  }
+
+  /** Hedefi belli olan modlar: onaylanınca doğrudan sınava girilir. */
+  function openTargetBriefing(mode: BattleMode, target: WorldCity) {
+    openBriefing(
+      mode,
+      { targetName: target.name, targetParent: getCountry(target.country)?.name ?? '' },
+      () => navigation.navigate('Quiz', { targetId: target.id, battleColors: mode.gradient })
+    );
+  }
+
+  function handleModePress(mode: BattleMode) {
     const state = useGameStore.getState();
-    const attackable = WORLD_CITIES.filter(
-      (city) => state.conquests[city.id]?.ownerId !== state.localPlayer.id
-    );
-    const pool = attackable.length > 0 ? attackable : WORLD_CITIES;
-    confirmAttack(pickRandom(pool), 'Hızlı Savaş');
-  }
 
-  function handleTargetedAttack() {
-    Alert.alert(
-      'Hedefli Saldırı',
-      'Yukarıdaki dünya haritasından bir ülkeye dokun, açılan şehir kartlarından hedefini seç.'
-    );
-  }
+    switch (mode.key) {
+      case 'quick': {
+        const attackable = WORLD_CITIES.filter(
+          (city) => state.conquests[city.id]?.ownerId !== state.localPlayer.id
+        );
+        const pool = attackable.length > 0 ? attackable : WORLD_CITIES;
+        openTargetBriefing(mode, pickRandom(pool));
+        return;
+      }
 
-  // Komşu Fetih: şimdilik "komşuluk" = bayrak diktiğin ülkedeki diğer şehirler.
-  // Gerçek sınır komşuluğu (ülkeler arası) backend'den gelince burası değişecek.
-  function handleNeighborConquest() {
-    const state = useGameStore.getState();
-    const ownedCountries = new Set(
-      WORLD_CITIES.filter(
-        (city) => state.conquests[city.id]?.ownerId === state.localPlayer.id
-      ).map((city) => city.country)
-    );
+      case 'targeted':
+        // Hedef haritadan seçilecek; onay küreyi açar.
+        openBriefing(mode, {}, () => {
+          setGlobeRequested(true);
+          setViewMode('map');
+        });
+        return;
 
-    if (ownedCountries.size === 0) {
-      Alert.alert('Komşu Fetih', 'Önce Hızlı Savaş ile ilk şehrini fethetmelisin.');
-      return;
+      // Komşu Fetih: şimdilik "komşuluk" = bayrak diktiğin ülkedeki diğer
+      // şehirler. Gerçek sınır komşuluğu backend'den gelince burası değişecek.
+      case 'neighbor': {
+        const ownedCountries = new Set(
+          WORLD_CITIES.filter(
+            (city) => state.conquests[city.id]?.ownerId === state.localPlayer.id
+          ).map((city) => city.country)
+        );
+
+        if (ownedCountries.size === 0) {
+          openBriefing(
+            mode,
+            { blockedReason: 'Önce Hızlı Savaş ile ilk şehrini fethetmelisin.' },
+            () => {}
+          );
+          return;
+        }
+
+        const pool = WORLD_CITIES.filter(
+          (city) =>
+            ownedCountries.has(city.country) &&
+            state.conquests[city.id]?.ownerId !== state.localPlayer.id
+        );
+
+        if (pool.length === 0) {
+          openBriefing(
+            mode,
+            { blockedReason: 'Bayrak diktiğin ülkelerin tamamı zaten senin!' },
+            () => {}
+          );
+          return;
+        }
+
+        openTargetBriefing(mode, pickRandom(pool));
+        return;
+      }
+
+      case 'daily': {
+        // Gün numarasına göre sabit hedef: aynı gün herkese aynı şehir düşer.
+        const dayIndex = Math.floor(Date.now() / DAY_MS);
+        openTargetBriefing(mode, WORLD_CITIES[dayIndex % WORLD_CITIES.length]);
+        return;
+      }
     }
-
-    const pool = WORLD_CITIES.filter(
-      (city) =>
-        ownedCountries.has(city.country) &&
-        state.conquests[city.id]?.ownerId !== state.localPlayer.id
-    );
-
-    if (pool.length === 0) {
-      Alert.alert('Komşu Fetih', 'Bayrak diktiğin ülkelerin tamamı zaten senin!');
-      return;
-    }
-
-    confirmAttack(pickRandom(pool), 'Komşu Fetih');
   }
 
-  function handleDailySiege() {
-    // Gün numarasına göre sabit hedef: aynı gün içinde herkese aynı şehir düşer.
-    const dayIndex = Math.floor(Date.now() / DAY_MS);
-    confirmAttack(WORLD_CITIES[dayIndex % WORLD_CITIES.length], 'Günlük Kuşatma');
+  /** Modal önce kapanır, eylem sonra çalışır — geçiş üst üste binmesin. */
+  function handleConfirm() {
+    const action = pending?.confirm;
+    setPending(null);
+    action?.();
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="dark" />
+    <LinearGradient
+      colors={skyBackground}
+      locations={skyBackgroundLocations}
+      style={styles.container}
+    >
+      {/* Arka plan görseli şimdilik kapalı — uygulamanın gökyüzü zemini kullanılıyor.
+          Geri açmak için aşağıdaki bloğu ve backdrop/backdropImage stillerini aç,
+          react-native'den Image importunu geri ekle:
 
-      {/* Tüm ekranın arkasındaki gökyüzü — harita kartı da saydam olduğu için üstünde uçar. */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <SkyBackdrop />
-      </View>
+      <View style={[StyleSheet.absoluteFill, styles.backdrop]} pointerEvents="none">
+        <Image source={require('../images/main/war_main.png')} style={styles.backdropImage} />
+      </View> */}
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerLeft}>
@@ -148,11 +287,7 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
       {/* Ekranın üst yarısı: ülke kartları ya da küre */}
       <View style={styles.mapArea}>
         {viewMode === 'list' && (
-          <CountryCarousel
-            onSelectCountry={(countryCode) =>
-              navigation.navigate('CityList', { countryCode })
-            }
-          />
+          <CountryCarousel onSelectCountry={handleSelectCountry} />
         )}
 
         {/* Küre bir kez istendikten sonra ağaçta kalır; kartlara dönünce
@@ -164,10 +299,8 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
           >
             <WorldGlobeView
               ownerColors={ownerColors}
-              onReady={() => setGlobeReady(true)}
-              onSelectCountry={(countryCode) =>
-                navigation.navigate('CityList', { countryCode })
-              }
+              onReady={handleGlobeReady}
+              onSelectCountry={handleSelectCountry}
             />
           </View>
         )}
@@ -232,52 +365,35 @@ export default function AnasayfaScreen({ navigation }: TabScreenProps<'Anasayfa'
 
       {/* Ekranın alt yarısı: 2x2 savaş modu kartları */}
       <View style={styles.cardArea}>
-        <View style={styles.cardRow}>
-          <GameModeCard
-            title="Hızlı Savaş"
-            subtitle="Sistem dünyadan rastgele bir şehir seçer. Hemen fethet."
-            tag="RASTGELE"
-            icon="sword-cross"
-            gradient={['#FF7E6B', '#E11D48']}
-            onPress={handleQuickBattle}
-          />
-          <GameModeCard
-            title="Hedefli Saldırı"
-            subtitle="Haritadan ülkeyi aç, istediğin şehre doğrudan saldır."
-            tag="SEÇİMLİ"
-            icon="target"
-            gradient={['#5CC6FF', '#2563EB']}
-            onPress={handleTargetedAttack}
-          />
-        </View>
-
-        <View style={styles.cardRow}>
-          <GameModeCard
-            title="Komşu Fetih"
-            subtitle="Bayrak diktiğin ülkelerin diğer şehirlerine saldır."
-            tag="STRATEJİ"
-            icon="fire"
-            gradient={['#5FE0B0', '#0D9488']}
-            onPress={handleNeighborConquest}
-          />
-          <GameModeCard
-            title="Günlük Kuşatma"
-            subtitle="Her gün özel bir şehir. Fethedene ekstra altın."
-            tag="ÖDÜLLÜ"
-            icon="trophy-variant"
-            gradient={['#FFD35C', '#E08A00']}
-            onPress={handleDailySiege}
-          />
-        </View>
+        {[BATTLE_MODES.slice(0, 2), BATTLE_MODES.slice(2)].map((row) => (
+          <View key={row[0].key} style={styles.cardRow}>
+            {row.map((mode) => (
+              <GameModeCard
+                key={mode.key}
+                title={mode.title}
+                subtitle={mode.subtitle}
+                tag={mode.tag}
+                icon={mode.icon}
+                gradient={mode.gradient}
+                onPress={() => handleModePress(mode)}
+              />
+            ))}
+          </View>
+        ))}
       </View>
-    </View>
+
+      <BattleModal
+        briefing={pending?.briefing ?? null}
+        onClose={() => setPending(null)}
+        onConfirm={handleConfirm}
+      />
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.sky,
   },
   header: {
     flexDirection: 'row',

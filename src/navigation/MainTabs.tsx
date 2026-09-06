@@ -5,7 +5,7 @@ import AnasayfaScreen from '../screens/AnasayfaScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RewardsScreen from '../screens/RewardsScreen';
 import ShopScreen from '../screens/ShopScreen';
-import { colors } from '../theme/colors';
+import { colors, skyBackground } from '../theme/colors';
 import { TabParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -24,6 +24,7 @@ export default function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        sceneStyle: { backgroundColor: skyBackground[0] },
         tabBarActiveTintColor: colors.primaryDark,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {

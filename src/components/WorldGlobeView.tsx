@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { InteractionManager, StyleSheet, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { buildGlobeHtml } from './globeHtml';
-import { colors } from '../theme/colors';
 
 interface Props {
   onSelectCountry: (code: string) => void;
@@ -17,7 +16,7 @@ interface Props {
  * gerekçesi globeHtml.ts başındaki notta. React Native tarafı sadece iki şey
  * yapar: sayfayı kurar ve gelen "ülke seçildi" mesajını yönlendirir.
  */
-export default function WorldGlobeView({ onSelectCountry, ownerColors, onReady }: Props) {
+function WorldGlobeView({ onSelectCountry, ownerColors, onReady }: Props) {
   const webViewRef = useRef<WebView>(null);
   const isReady = useRef(false);
 
@@ -92,14 +91,17 @@ export default function WorldGlobeView({ onSelectCountry, ownerColors, onReady }
   );
 }
 
+export default memo(WorldGlobeView);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: colors.sky,
+    // Saydam: küre, ekranın arka plan görselinin üstünde durur.
+    backgroundColor: 'transparent',
   },
   webView: {
     flex: 1,
-    backgroundColor: colors.sky,
+    backgroundColor: 'transparent',
   },
 });

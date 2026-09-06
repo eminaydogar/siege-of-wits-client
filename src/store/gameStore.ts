@@ -30,12 +30,14 @@ export const RIVAL_PLAYERS: Player[] = [
 ];
 
 // Dünya haritası ilk açılışta boş görünmesin diye rakiplerin elindeki şehirler.
+// Hepsi Afganistan'da: tek ülkeyi açıp sahiplik göstergelerinin tamamı bir
+// arada görülebilsin diye böyle toplandı.
 const SEED_CONQUESTS: Record<string, { ownerId: PlayerId; score: number }> = {
-  'gb-2643743': { ownerId: 'rival-ejder', score: 14 }, // Londra
-  'ru-524901': { ownerId: 'rival-kartal', score: 16 }, // Moskova
-  'eg-360630': { ownerId: 'rival-ejder', score: 12 }, // Kahire
-  'jp-1850147': { ownerId: 'rival-kartal', score: 15 }, // Tokyo
-  'us-5128581': { ownerId: 'rival-ejder', score: 17 }, // New York
+  'af-1138958': { ownerId: 'rival-ejder', score: 16 }, // Kâbil
+  'af-1140026': { ownerId: 'rival-kartal', score: 13 }, // Herat
+  'af-1133616': { ownerId: 'rival-ejder', score: 11 }, // Mezirek-i Şerif
+  'af-1138336': { ownerId: 'rival-kartal', score: 15 }, // Kandehar
+  'af-1139715': { ownerId: 'rival-ejder', score: 12 }, // Celalabad
 };
 
 // Şehir kimliği → ülke kodu. Ülke bazlı sorgular (harita rengi, istatistik)
@@ -180,11 +182,13 @@ export const useGameStore = create<GameState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ localPlayer: state.localPlayer, conquests: state.conquests }),
       // v2: hedefler Türkiye ilçelerinden dünya şehirlerine geçti; eski kayıtlardaki
-      // ilçe kimliklerinin yeni haritada karşılığı yok, o yüzden sıfırdan başlatılıyor.
-      version: 2,
+      // ilçe kimliklerinin yeni haritada karşılığı yok.
+      // v3: rakiplerin şehirleri Afganistan'a toplandı. İki durumda da kayıtlı
+      // fetihler atılıp yeni tohum uygulanıyor, yoksa cihazdaki eski dağılım kalır.
+      version: 3,
       migrate: (persisted, version) => {
         const state = persisted as { localPlayer?: Player; conquests?: Record<string, ConquestEntry> };
-        if (version < 2) {
+        if (version < 3) {
           return { ...state, conquests: SEED_CONQUESTS };
         }
         return state;
