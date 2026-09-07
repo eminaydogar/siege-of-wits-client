@@ -73,7 +73,8 @@ export default function RootNavigator() {
         <Stack.Screen
           name="Leaderboard"
           component={LeaderboardScreen}
-          options={{ title: 'Sıralama Tablosu' }}
+          // Ekran kendi lacivert başlık bandını çiziyor (Geri Dön düğmesi orada).
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </NavigationContainer>

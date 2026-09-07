@@ -4,6 +4,13 @@ export interface Player {
   id: PlayerId;
   name: string;
   color: string;
+  /**
+   * Profil fotoğrafı. Şimdilik cihazdan seçilen dosyanın yerel yolu; yükleme
+   * ucu bağlanınca UserDefinition.IMAGE alanından dönen URL burada tutulacak.
+   */
+  avatar?: string | null;
+  /** Hesabın açıldığı an (ISO). Backend bağlanınca sunucudan gelecek. */
+  joinedAt?: string;
 }
 
 export interface District {

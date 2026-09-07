@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { WORLD_CITIES } from '../data/worldCities';
+import { getCityById, WorldCity, WORLD_CITIES } from '../data/worldCities';
 import { Player, PlayerId } from '../types';
 
 export const LOCAL_PLAYER_ID = 'local-player';
@@ -25,8 +25,20 @@ function randomPlayerColor(): string {
 // Harita hemen boş görünmesin diye eklenmiş örnek rakipler.
 // Backend entegre edilince gerçek oyuncularla değişecek.
 export const RIVAL_PLAYERS: Player[] = [
-  { id: 'rival-ejder', name: 'Ejder Ordusu', color: '#B91C1C' },
-  { id: 'rival-kartal', name: 'Kartal Birliği', color: '#1D4ED8' },
+  {
+    id: 'rival-ejder',
+    name: 'Ejder Ordusu',
+    color: '#B91C1C',
+    avatar: null,
+    joinedAt: '2024-03-12T00:00:00.000Z',
+  },
+  {
+    id: 'rival-kartal',
+    name: 'Kartal Birliği',
+    color: '#1D4ED8',
+    avatar: null,
+    joinedAt: '2024-09-28T00:00:00.000Z',
+  },
 ];
 
 // Dünya haritası ilk açılışta boş görünmesin diye rakiplerin elindeki şehirler.
@@ -59,6 +71,8 @@ interface GameState {
   localPlayer: Player;
   conquests: Record<string, ConquestEntry>;
   setLocalPlayerName: (name: string) => void;
+  /** Profil fotoğrafı; null verilirse fotoğraf kaldırılır. */
+  setLocalPlayerAvatar: (avatar: string | null) => void;
   getOwner: (targetId: string) => (Player & { score: number }) | null;
   /** Bir hedef için sınav sonucunu değerlendirir. Skor mevcut sahibi geçerse toprak el değiştirir. */
   submitConquestAttempt: (
@@ -66,6 +80,12 @@ interface GameState {
     score: number
   ) => { success: boolean; previousOwnerId: PlayerId | null; previousScore: number | null };
   getAllPlayers: () => Player[];
+  /**
+   * Bir oyuncunun fethettiği şehirler — en yüksek skordan başlayarak.
+   * Profil kartındaki şehir şeridi bunu sayfalayarak gösteriyor; servis
+   * bağlanınca buranın yerini sayfalı bir uç alacak.
+   */
+  getPlayerCities: (playerId: PlayerId) => { city: WorldCity; score: number }[];
   getLeaderboard: () => { player: Player; cityCount: number; totalScore: number }[];
   /**
    * Dünya haritasının boyanması için ülke kodu → sahip rengi.
@@ -84,11 +104,20 @@ function findPlayer(id: PlayerId, localPlayer: Player): Player | undefined {
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
-      localPlayer: { id: LOCAL_PLAYER_ID, name: 'Sen', color: randomPlayerColor() },
+      localPlayer: {
+        id: LOCAL_PLAYER_ID,
+        name: 'Sen',
+        color: randomPlayerColor(),
+        avatar: null,
+        joinedAt: new Date().toISOString(),
+      },
       conquests: SEED_CONQUESTS,
 
       setLocalPlayerName: (name) =>
         set((state) => ({ localPlayer: { ...state.localPlayer, name } })),
+
+      setLocalPlayerAvatar: (avatar) =>
+        set((state) => ({ localPlayer: { ...state.localPlayer, avatar } })),
 
       getOwner: (targetId) => {
         const state = get();
@@ -119,6 +148,18 @@ export const useGameStore = create<GameState>()(
       },
 
       getAllPlayers: () => [get().localPlayer, ...RIVAL_PLAYERS],
+
+      getPlayerCities: (playerId) => {
+        const state = get();
+        return Object.entries(state.conquests)
+          .filter(([, entry]) => entry.ownerId === playerId)
+          .map(([cityId, entry]) => {
+            const city = getCityById(cityId);
+            return city ? { city, score: entry.score } : null;
+          })
+          .filter((item): item is { city: WorldCity; score: number } => item !== null)
+          .sort((a, b) => b.score - a.score || a.city.name.localeCompare(b.city.name, 'tr'));
+      },
 
       getLeaderboard: () => {
         const state = get();
@@ -185,13 +226,22 @@ export const useGameStore = create<GameState>()(
       // ilçe kimliklerinin yeni haritada karşılığı yok.
       // v3: rakiplerin şehirleri Afganistan'a toplandı. İki durumda da kayıtlı
       // fetihler atılıp yeni tohum uygulanıyor, yoksa cihazdaki eski dağılım kalır.
-      version: 3,
+      // v4: oyuncuya profil fotoğrafı ve katılma tarihi eklendi; eski kayıtlarda
+      // bu alanlar yok, yoksa profil kartı tarihsiz açılır.
+      version: 4,
       migrate: (persisted, version) => {
         const state = persisted as { localPlayer?: Player; conquests?: Record<string, ConquestEntry> };
-        if (version < 3) {
-          return { ...state, conquests: SEED_CONQUESTS };
+        const next = version < 3 ? { ...state, conquests: SEED_CONQUESTS } : { ...state };
+        if (next.localPlayer) {
+          next.localPlayer = {
+            ...next.localPlayer,
+            avatar: next.localPlayer.avatar ?? null,
+            // Tarihi bilinmeyen eski kayıtlar bugünden başlatılır; gerçek tarih
+            // hesap servisi bağlanınca sunucudan gelecek.
+            joinedAt: next.localPlayer.joinedAt ?? new Date().toISOString(),
+          };
         }
-        return state;
+        return next;
       },
     }
   )

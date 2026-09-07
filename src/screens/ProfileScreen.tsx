@@ -49,6 +49,7 @@ export default function ProfileScreen() {
 
   const localPlayer = useGameStore((s) => s.localPlayer);
   const setLocalPlayerName = useGameStore((s) => s.setLocalPlayerName);
+  const setLocalPlayerAvatar = useGameStore((s) => s.setLocalPlayerAvatar);
   const getPlayerStats = useGameStore((s) => s.getPlayerStats);
   useGameStore((s) => s.conquests); // fetih değişince istatistikler tazelensin
   const stats = getPlayerStats();
@@ -56,9 +57,10 @@ export default function ProfileScreen() {
   const [name, setName] = useState(localPlayer.name);
   const [surname, setSurname] = useState('');
   const [email, setEmail] = useState('');
-  // UserDefinition.IMAGE karşılığı. Şimdilik cihazdaki dosyanın yerel yolu;
-  // yükleme ucu bağlanınca burada sunucudan dönen URL tutulacak.
-  const [image, setImage] = useState<string | null>(null);
+  // UserDefinition.IMAGE karşılığı. Store'da duruyor ki sıralama tablosundaki
+  // profil kartı da aynı fotoğrafı gösterebilsin; yükleme ucu bağlanınca burada
+  // sunucudan dönen URL tutulacak.
+  const image = localPlayer.avatar ?? null;
   const [password, setPassword] = useState(PASSWORD_PLACEHOLDER);
   const [showPassword, setShowPassword] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -83,7 +85,7 @@ export default function ProfileScreen() {
       quality: 0.8,
     });
 
-    if (!result.canceled) setImage(result.assets[0].uri);
+    if (!result.canceled) setLocalPlayerAvatar(result.assets[0].uri);
   }
 
   function handleSave() {
